@@ -8,7 +8,9 @@ import (
 	"github.com/go-chi/render"
 	"io/fs"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 )
@@ -60,11 +62,14 @@ func main() {
 		})
 	})
 
-	http.ListenAndServe(":3333", r)
+	err := http.ListenAndServe(":3333", r)
+	if err != nil {
+		log.Println(err)
+	}
 }
 
 func searchUsers(w http.ResponseWriter, r *http.Request) {
-	f, _ := ioutil.ReadFile(store)
+	f, _ := os.ReadFile(store)
 	s := UserStore{}
 	_ = json.Unmarshal(f, &s)
 
@@ -79,7 +84,7 @@ type CreateUserRequest struct {
 func (c *CreateUserRequest) Bind(r *http.Request) error { return nil }
 
 func createUser(w http.ResponseWriter, r *http.Request) {
-	f, _ := ioutil.ReadFile(store)
+	f, _ := os.ReadFile(store)
 	s := UserStore{}
 	_ = json.Unmarshal(f, &s)
 
@@ -101,7 +106,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	s.List[id] = u
 
 	b, _ := json.Marshal(&s)
-	_ = ioutil.WriteFile(store, b, fs.ModePerm)
+	_ = os.WriteFile(store, b, fs.ModePerm)
 
 	render.Status(r, http.StatusCreated)
 	render.JSON(w, r, map[string]interface{}{
@@ -110,7 +115,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUser(w http.ResponseWriter, r *http.Request) {
-	f, _ := ioutil.ReadFile(store)
+	f, _ := os.ReadFile(store)
 	s := UserStore{}
 	_ = json.Unmarshal(f, &s)
 
@@ -155,7 +160,7 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteUser(w http.ResponseWriter, r *http.Request) {
-	f, _ := ioutil.ReadFile(store)
+	f, _ := os.ReadFile(store)
 	s := UserStore{}
 	_ = json.Unmarshal(f, &s)
 
@@ -169,7 +174,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 	delete(s.List, id)
 
 	b, _ := json.Marshal(&s)
-	_ = ioutil.WriteFile(store, b, fs.ModePerm)
+	_ = os.WriteFile(store, b, fs.ModePerm)
 
 	render.Status(r, http.StatusNoContent)
 }
