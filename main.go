@@ -3,16 +3,16 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
 	"io/fs"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
 )
 
 const store = `users.json`
@@ -131,7 +131,7 @@ type UpdateUserRequest struct {
 func (c *UpdateUserRequest) Bind(r *http.Request) error { return nil }
 
 func updateUser(w http.ResponseWriter, r *http.Request) {
-	f, _ := ioutil.ReadFile(store)
+	f, _ := os.ReadFile(store)
 	s := UserStore{}
 	_ = json.Unmarshal(f, &s)
 
@@ -154,7 +154,7 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 	s.List[id] = u
 
 	b, _ := json.Marshal(&s)
-	_ = ioutil.WriteFile(store, b, fs.ModePerm)
+	_ = os.WriteFile(store, b, fs.ModePerm)
 
 	render.Status(r, http.StatusNoContent)
 }
