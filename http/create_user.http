@@ -2,8 +2,8 @@ POST http://localhost:3333/api/v1/users
 Content-Type: application/json
 
 {
-  "display_name": "User10",
-  "email": "ten@mail.ru"
+  "display_name": "writer",
+  "email": "writer@mail.gov"
 }
 
 ###

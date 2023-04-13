@@ -1,24 +1,25 @@
 package main
 
 import (
-	"errors"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 
-	db "refactoring/database"
+	dbJSON "refactoring/database/json"
+	"refactoring/interfaces/database"
+	customErr "refactoring/structs/error"
+	"refactoring/structs/user"
 )
 
-var (
-	UserNotFound = errors.New("user_not_found")
-)
+var db database.DBWorker
 
 func main() {
+	db = dbJSON.InitDB()
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -54,9 +55,9 @@ func main() {
 
 func getUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	user, err := db.UserStore{}.Get(id)
+	user, err := db.Get(id)
 	if err != nil {
-		if errRender := render.Render(w, r, ErrInvalidRequest(err)); errRender != nil {
+		if errRender := render.Render(w, r, customErr.ErrInvalidRequest(err)); errRender != nil {
 			log.Println(errRender)
 		}
 		return
@@ -65,26 +66,20 @@ func getUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func searchUsers(w http.ResponseWriter, r *http.Request) {
-	userStore := db.UserStore{}.Search()
+	userStore, _ := db.Search() // error handler
 	render.JSON(w, r, userStore)
 }
 
 func createUser(w http.ResponseWriter, r *http.Request) {
-	request := UserRequest{}
-	if err := render.Bind(r, &request); err != nil {
-		if err = render.Render(w, r, ErrInvalidRequest(err)); err != nil {
+	user := user.Request{}
+	if err := render.Bind(r, &user); err != nil {
+		if err = render.Render(w, r, customErr.ErrInvalidRequest(err)); err != nil {
 			log.Println(err)
 		}
 		return
 	}
-
-	userStore := db.UserStore{}.Search()
-	user := &db.User{
-		DisplayName: request.DisplayName,
-		Email:       request.Email,
-		New:         true,
-	}
-	id, _ := userStore.Save(user)
+	user.New = true
+	id, _ := db.Save(&user)
 
 	render.Status(r, http.StatusCreated)
 	render.JSON(w, r, map[string]interface{}{
@@ -93,29 +88,18 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateUser(w http.ResponseWriter, r *http.Request) {
-	request := UserRequest{}
-	if err := render.Bind(r, &request); err != nil {
-		_ = render.Render(w, r, ErrInvalidRequest(err))
+	user := user.Request{}
+	if err := render.Bind(r, &user); err != nil {
+		_ = render.Render(w, r, customErr.ErrInvalidRequest(err))
 		return
 	}
-
 	id := chi.URLParam(r, "id")
-	userID, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		_ = render.Render(w, r, ErrInvalidRequest(err))
-		return
-	}
 
-	userStore := db.UserStore{}.Search()
-	user := &db.User{
-		DisplayName: request.DisplayName,
-		Email:       request.Email,
-		New:         false,
-		ID:          userID,
-	}
-	_, err = userStore.Save(user)
+	user.New = false
+	user.ID = id
+	_, err := db.Save(&user)
 	if err != nil {
-		if err = render.Render(w, r, ErrInvalidRequest(err)); err != nil {
+		if err = render.Render(w, r, customErr.ErrInvalidRequest(err)); err != nil {
 			log.Println(err)
 		}
 		return
@@ -123,17 +107,16 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 
 	render.Status(r, http.StatusOK)
 	render.JSON(w, r, map[string]interface{}{
-		"user_id": userID,
+		"user_id": id,
 	})
 }
 
 func deleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	userStore := db.UserStore{}.Search()
-	err := userStore.Delete(id)
+	err := db.Delete(id)
 	if err != nil {
-		if err = render.Render(w, r, ErrInvalidRequest(err)); err != nil {
+		if err = render.Render(w, r, customErr.ErrInvalidRequest(err)); err != nil {
 			log.Println(err)
 		}
 		return
@@ -144,34 +127,4 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		"message": "deleted",
 		"user_id": id,
 	})
-}
-
-type UserRequest struct {
-	DisplayName string `json:"display_name"`
-	Email       string `json:"email"`
-}
-
-func (c *UserRequest) Bind(r *http.Request) error { return nil }
-
-type ErrResponse struct {
-	Err            error `json:"-"`
-	HTTPStatusCode int   `json:"-"`
-
-	StatusText string `json:"status"`
-	AppCode    int64  `json:"code,omitempty"`
-	ErrorText  string `json:"error,omitempty"`
-}
-
-func (e *ErrResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	render.Status(r, e.HTTPStatusCode)
-	return nil
-}
-
-func ErrInvalidRequest(err error) render.Renderer {
-	return &ErrResponse{
-		Err:            err,
-		HTTPStatusCode: 400,
-		StatusText:     "Invalid request.",
-		ErrorText:      err.Error(),
-	}
 }
