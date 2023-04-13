@@ -1,33 +1,17 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
-	"io/fs"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
-)
 
-const store = `users.json`
-
-type (
-	User struct {
-		CreatedAt   time.Time `json:"created_at"`
-		DisplayName string    `json:"display_name"`
-		Email       string    `json:"email"`
-	}
-	UserList  map[string]User
-	UserStore struct {
-		Increment int      `json:"increment"`
-		List      UserList `json:"list"`
-	}
+	db "refactoring/database"
 )
 
 var (
@@ -68,45 +52,39 @@ func main() {
 	}
 }
 
+func getUser(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	user, err := db.UserStore{}.Get(id)
+	if err != nil {
+		if errRender := render.Render(w, r, ErrInvalidRequest(err)); errRender != nil {
+			log.Println(errRender)
+		}
+		return
+	}
+	render.JSON(w, r, user)
+}
+
 func searchUsers(w http.ResponseWriter, r *http.Request) {
-	f, _ := os.ReadFile(store)
-	s := UserStore{}
-	_ = json.Unmarshal(f, &s)
-
-	render.JSON(w, r, s.List)
+	userStore := db.UserStore{}.Search()
+	render.JSON(w, r, userStore)
 }
-
-type CreateUserRequest struct {
-	DisplayName string `json:"display_name"`
-	Email       string `json:"email"`
-}
-
-func (c *CreateUserRequest) Bind(r *http.Request) error { return nil }
 
 func createUser(w http.ResponseWriter, r *http.Request) {
-	f, _ := os.ReadFile(store)
-	s := UserStore{}
-	_ = json.Unmarshal(f, &s)
-
-	request := CreateUserRequest{}
-
+	request := UserRequest{}
 	if err := render.Bind(r, &request); err != nil {
-		_ = render.Render(w, r, ErrInvalidRequest(err))
+		if err = render.Render(w, r, ErrInvalidRequest(err)); err != nil {
+			log.Println(err)
+		}
 		return
 	}
 
-	s.Increment++
-	u := User{
-		CreatedAt:   time.Now(),
+	userStore := db.UserStore{}.Search()
+	user := &db.User{
 		DisplayName: request.DisplayName,
-		Email:       request.DisplayName,
+		Email:       request.Email,
+		New:         true,
 	}
-
-	id := strconv.Itoa(s.Increment)
-	s.List[id] = u
-
-	b, _ := json.Marshal(&s)
-	_ = os.WriteFile(store, b, fs.ModePerm)
+	id, _ := userStore.Save(user)
 
 	render.Status(r, http.StatusCreated)
 	render.JSON(w, r, map[string]interface{}{
@@ -114,70 +92,66 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func getUser(w http.ResponseWriter, r *http.Request) {
-	f, _ := os.ReadFile(store)
-	s := UserStore{}
-	_ = json.Unmarshal(f, &s)
-
-	id := chi.URLParam(r, "id")
-
-	render.JSON(w, r, s.List[id])
-}
-
-type UpdateUserRequest struct {
-	DisplayName string `json:"display_name"`
-}
-
-func (c *UpdateUserRequest) Bind(r *http.Request) error { return nil }
-
 func updateUser(w http.ResponseWriter, r *http.Request) {
-	f, _ := os.ReadFile(store)
-	s := UserStore{}
-	_ = json.Unmarshal(f, &s)
-
-	request := UpdateUserRequest{}
-
+	request := UserRequest{}
 	if err := render.Bind(r, &request); err != nil {
 		_ = render.Render(w, r, ErrInvalidRequest(err))
 		return
 	}
 
 	id := chi.URLParam(r, "id")
-
-	if _, ok := s.List[id]; !ok {
-		_ = render.Render(w, r, ErrInvalidRequest(UserNotFound))
+	userID, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		_ = render.Render(w, r, ErrInvalidRequest(err))
 		return
 	}
 
-	u := s.List[id]
-	u.DisplayName = request.DisplayName
-	s.List[id] = u
+	userStore := db.UserStore{}.Search()
+	user := &db.User{
+		DisplayName: request.DisplayName,
+		Email:       request.Email,
+		New:         false,
+		ID:          userID,
+	}
+	_, err = userStore.Save(user)
+	if err != nil {
+		if err = render.Render(w, r, ErrInvalidRequest(err)); err != nil {
+			log.Println(err)
+		}
+		return
+	}
 
-	b, _ := json.Marshal(&s)
-	_ = os.WriteFile(store, b, fs.ModePerm)
-
-	render.Status(r, http.StatusNoContent)
+	render.Status(r, http.StatusOK)
+	render.JSON(w, r, map[string]interface{}{
+		"user_id": userID,
+	})
 }
 
 func deleteUser(w http.ResponseWriter, r *http.Request) {
-	f, _ := os.ReadFile(store)
-	s := UserStore{}
-	_ = json.Unmarshal(f, &s)
-
 	id := chi.URLParam(r, "id")
 
-	if _, ok := s.List[id]; !ok {
-		_ = render.Render(w, r, ErrInvalidRequest(UserNotFound))
+	userStore := db.UserStore{}.Search()
+	err := userStore.Delete(id)
+	if err != nil {
+		if err = render.Render(w, r, ErrInvalidRequest(err)); err != nil {
+			log.Println(err)
+		}
 		return
 	}
 
-	delete(s.List, id)
-
-	b, _ := json.Marshal(&s)
-	_ = os.WriteFile(store, b, fs.ModePerm)
-
-	render.Status(r, http.StatusNoContent)
+	render.Status(r, http.StatusOK)
+	render.JSON(w, r, map[string]interface{}{
+		"message": "deleted",
+		"user_id": id,
+	})
 }
+
+type UserRequest struct {
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+}
+
+func (c *UserRequest) Bind(r *http.Request) error { return nil }
 
 type ErrResponse struct {
 	Err            error `json:"-"`
