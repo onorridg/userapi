@@ -81,6 +81,8 @@ func (uS *UserStore) Delete(id string) error {
 		return UserNotFound
 	}
 	delete(uS.List, userID)
+	b, _ := json.Marshal(uS)
+	_ = os.WriteFile(store, b, fs.ModePerm)
 	return nil
 }
 
