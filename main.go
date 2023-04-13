@@ -3,14 +3,15 @@ package main
 import (
 	"log"
 	"net/http"
-	"refactoring/api/v1"
-	customHttp "refactoring/interfaces/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"refactoring/api/v1"
 	dbJSON "refactoring/database/json"
 	"refactoring/interfaces/database"
+	customHttp "refactoring/interfaces/http"
 )
 
 var db database.DBWorker

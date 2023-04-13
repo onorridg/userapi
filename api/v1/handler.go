@@ -40,9 +40,7 @@ func (api ApiV1) GetUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	user, err := db.Get(id)
 	if err != nil {
-		if errRender := render.Render(w, r, customErr.ErrInvalidRequest(err)); errRender != nil {
-			log.Println(errRender)
-		}
+		renderErr(w, r, err)
 		return
 	}
 	render.JSON(w, r, user)
@@ -56,9 +54,7 @@ func (api ApiV1) SearchUsers(w http.ResponseWriter, r *http.Request) {
 func (api ApiV1) CreateUser(w http.ResponseWriter, r *http.Request) {
 	user := user.Request{}
 	if err := render.Bind(r, &user); err != nil {
-		if err = render.Render(w, r, customErr.ErrInvalidRequest(err)); err != nil {
-			log.Println(err)
-		}
+		renderErr(w, r, err)
 		return
 	}
 	user.New = true
@@ -73,16 +69,14 @@ func (api ApiV1) CreateUser(w http.ResponseWriter, r *http.Request) {
 func (api ApiV1) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	user := user.Request{}
 	if err := render.Bind(r, &user); err != nil {
-		_ = render.Render(w, r, customErr.ErrInvalidRequest(err))
+		renderErr(w, r, err)
 		return
 	}
 	id := chi.URLParam(r, "id")
 	user.New, user.ID = false, id
 	_, err := db.Save(&user)
 	if err != nil {
-		if err = render.Render(w, r, customErr.ErrInvalidRequest(err)); err != nil {
-			log.Println(err)
-		}
+		renderErr(w, r, err)
 		return
 	}
 
@@ -97,9 +91,7 @@ func (api ApiV1) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	err := db.Delete(id)
 	if err != nil {
-		if err = render.Render(w, r, customErr.ErrInvalidRequest(err)); err != nil {
-			log.Println(err)
-		}
+		renderErr(w, r, err)
 		return
 	}
 
@@ -108,4 +100,11 @@ func (api ApiV1) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		"message": "deleted",
 		"user_id": id,
 	})
+}
+
+func renderErr(w http.ResponseWriter, r *http.Request, err error) {
+	if errRender := render.Render(w, r, customErr.ErrInvalidRequest(err)); errRender != nil {
+		log.Println(errRender)
+	}
+	return
 }

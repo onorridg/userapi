@@ -28,10 +28,6 @@ type (
 	}
 )
 
-var (
-	uV UserStore
-)
-
 func (uS *UserStore) create(user *user.Request) (uint64, error) {
 	uS.Increment++
 	i := uS.Increment
