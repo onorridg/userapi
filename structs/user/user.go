@@ -9,4 +9,6 @@ type Request struct {
 	New         bool   `json:"-"`
 }
 
-func (c *Request) Bind(r *http.Request) error { return nil }
+func (c *Request) Bind(r *http.Request) error {
+	return nil
+}

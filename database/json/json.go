@@ -2,12 +2,13 @@ package json
 
 import (
 	"encoding/json"
-	"errors"
 	"io/fs"
 	"os"
+	"time"
+
+	customErr "refactoring/structs/error"
 	"refactoring/structs/user"
 	"refactoring/utils/convert"
-	"time"
 )
 
 const store = `users.json`
@@ -25,10 +26,6 @@ type (
 		Increment uint64   `json:"increment"`
 		List      UserList `json:"list"`
 	}
-)
-
-var (
-	UserNotFound = errors.New("user_not_found")
 )
 
 var (
@@ -54,7 +51,7 @@ func (uS *UserStore) update(user *user.Request) (uint64, error) {
 
 	u, exist := uS.List[id]
 	if !exist {
-		return 0, UserNotFound
+		return 0, customErr.UserNotFound
 	}
 
 	if user.Email != "" {
@@ -92,7 +89,7 @@ func (uS *UserStore) Get(id string) (*User, error) {
 	}
 	user, exist := uS.List[userID]
 	if !exist {
-		err = UserNotFound
+		err = customErr.UserNotFound
 	}
 	return user, err
 }
@@ -111,7 +108,7 @@ func (uS *UserStore) Delete(id string) error {
 		return err
 	}
 	if _, exist := uS.List[userID]; !exist {
-		return UserNotFound
+		return customErr.UserNotFound
 	}
 	delete(uS.List, userID)
 	if err = uS.saveJSONUserStore(); err != nil {
