@@ -6,10 +6,10 @@ import (
 )
 
 type DBUserWorker interface {
-	Get(id string) (*db.User, error)
-	Search() (*db.UserStore, error)
-	Save(user *user.Request) (uint64, error)
-	Delete(id string) error
+	Get(id string) (*db.User, int, error)
+	Search() (*db.UserStore, int, error)
+	Save(user *user.Request) (uint64, int, error)
+	Delete(id string) (int, error)
 }
 
 type DBWorker interface {

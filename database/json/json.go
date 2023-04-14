@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"io/fs"
 	"os"
+	"refactoring/structs/http/code"
+	customErr "refactoring/structs/http/response/error"
 	"time"
 
-	customErr "refactoring/structs/error"
 	"refactoring/structs/user"
 	"refactoring/utils/convert"
 )
@@ -28,7 +29,7 @@ type (
 	}
 )
 
-func (uS *UserStore) create(user *user.Request) (uint64, error) {
+func (uS *UserStore) create(user *user.Request) uint64 {
 	uS.Increment++
 	i := uS.Increment
 	uS.List[i] = &User{
@@ -36,18 +37,18 @@ func (uS *UserStore) create(user *user.Request) (uint64, error) {
 		Email:       user.Email,
 		CreatedAt:   time.Now(),
 	}
-	return i, nil
+	return i
 }
 
-func (uS *UserStore) update(user *user.Request) (uint64, error) {
+func (uS *UserStore) update(user *user.Request) (uint64, int, error) {
 	id, err := convert.StringToUInt64(user.ID)
 	if err != nil {
-		return 0, err
+		return 0, code.BadRequest, err
 	}
 
 	u, exist := uS.List[id]
 	if !exist {
-		return 0, customErr.UserNotFound
+		return 0, code.BadRequest, customErr.UserNotFound
 	}
 
 	if user.Email != "" {
@@ -57,60 +58,71 @@ func (uS *UserStore) update(user *user.Request) (uint64, error) {
 		u.DisplayName = user.DisplayName
 	}
 	uS.List[id] = u
-	return id, nil
+	return id, 0, nil
 }
-func (uS *UserStore) Save(user *user.Request) (uint64, error) {
+func (uS *UserStore) Save(user *user.Request) (uint64, int, error) {
 	var id uint64
 	var err error
+	var errCode int
 
-	uS.Search()
+	if _, errCode, err = uS.Search(); err != nil {
+		return 0, errCode, err
+	}
+
 	if user.New {
-		id, err = uS.create(user)
-	} else if id, err = uS.update(user); err != nil {
-		return 0, err
+		id = uS.create(user)
+	} else if id, errCode, err = uS.update(user); err != nil {
+		return 0, errCode, err
 	}
 	if err := uS.saveJSONUserStore(); err != nil {
-		return 0, err
+		return 0, errCode, err
 	}
-	return id, nil
+	return id, 0, nil
 }
 
-func (uS *UserStore) Get(id string) (*User, error) {
+func (uS *UserStore) Get(id string) (*User, int, error) {
 	userID, err := convert.StringToUInt64(id)
 	if err != nil {
-		return nil, err
+		return nil, code.BadRequest, err
 	}
+
 	if err := uS.getJSONUserStore(); err != nil {
-		return nil, err
+		return nil, code.InternalServerError, err
 	}
+
 	user, exist := uS.List[userID]
 	if !exist {
-		err = customErr.UserNotFound
+		return nil, code.BadRequest, customErr.UserNotFound
 	}
-	return user, err
+	return user, 0, nil
 }
 
-func (uS *UserStore) Search() (*UserStore, error) {
+func (uS *UserStore) Search() (*UserStore, int, error) {
 	if err := uS.getJSONUserStore(); err != nil {
-		return nil, err
+		return nil, code.InternalServerError, err
 	}
-	return uS, nil
+	return uS, 0, nil
 }
 
-func (uS *UserStore) Delete(id string) error {
-	uS.Search()
+func (uS *UserStore) Delete(id string) (int, error) {
+	if _, errCode, err := uS.Search(); err != nil {
+		return errCode, err
+	}
+
 	userID, err := convert.StringToUInt64(id)
 	if err != nil {
-		return err
+		return code.BadRequest, err
 	}
+
 	if _, exist := uS.List[userID]; !exist {
-		return customErr.UserNotFound
+		return code.BadRequest, customErr.UserNotFound
 	}
+
 	delete(uS.List, userID)
 	if err = uS.saveJSONUserStore(); err != nil {
-		return err
+		return code.InternalServerError, err
 	}
-	return nil
+	return 0, nil
 }
 
 func (uS *UserStore) saveJSONUserStore() error {
@@ -118,6 +130,7 @@ func (uS *UserStore) saveJSONUserStore() error {
 	if err != nil {
 		return err
 	}
+
 	if err = os.WriteFile(store, b, fs.ModePerm); err != nil {
 		return err
 	}
@@ -129,6 +142,7 @@ func (uS *UserStore) getJSONUserStore() error {
 	if err != nil {
 		return err
 	}
+
 	if err = json.Unmarshal(f, uS); err != nil {
 		return err
 	}

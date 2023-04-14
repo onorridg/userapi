@@ -14,9 +14,10 @@ import (
 	customHttp "refactoring/interfaces/http"
 )
 
-var db database.DBWorker
-
-var v1Router customHttp.Handler
+var (
+	db       database.DBWorker
+	v1Router customHttp.Handler
+)
 
 func main() {
 	db = dbJSON.InitDB()

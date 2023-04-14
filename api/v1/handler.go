@@ -1,14 +1,16 @@
 package v1
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
 	"refactoring/interfaces/database"
-	customErr "refactoring/structs/error"
+	"refactoring/structs/http/code"
+	customErr "refactoring/structs/http/response/error"
+	"refactoring/structs/http/response/success"
 	"refactoring/structs/user"
 )
 
@@ -38,73 +40,72 @@ func (api ApiV1) Handler(r chi.Router, dbInterface database.DBWorker) {
 
 func (api ApiV1) GetUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	user, err := db.Get(id)
+	user, errCode, err := db.Get(id)
 	if err != nil {
-		renderErr(w, r, err)
+		customErr.RenderErr(w, r, err, errCode)
 		return
 	}
-	render.JSON(w, r, user)
+
+	resp := success.Response{StatusCode: code.OK, Data: user}
+	resp.Render(w, r)
 }
 
 func (api ApiV1) SearchUsers(w http.ResponseWriter, r *http.Request) {
-	userStore, _ := db.Search() // error handler
-	render.JSON(w, r, userStore)
+	userStore, errCode, err := db.Search()
+	if err != nil {
+		customErr.RenderErr(w, r, err, errCode)
+		return
+	}
+
+	resp := success.Response{StatusCode: code.OK, Data: userStore}
+	resp.Render(w, r)
 }
 
 func (api ApiV1) CreateUser(w http.ResponseWriter, r *http.Request) {
 	user := user.Request{}
 	if err := render.Bind(r, &user); err != nil {
-		renderErr(w, r, err)
+		customErr.RenderErr(w, r, err, code.InternalServerError)
 		return
 	}
-	user.New = true
-	id, _ := db.Save(&user)
 
-	render.Status(r, http.StatusCreated)
-	render.JSON(w, r, map[string]interface{}{
-		"user_id": id,
-	})
+	user.New = true
+	id, _, _ := db.Save(&user)
+
+	msg := fmt.Sprint("user_id: ", id)
+	resp := success.Response{StatusCode: code.Created, Message: msg}
+	resp.Render(w, r)
 }
 
 func (api ApiV1) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
 	user := user.Request{}
 	if err := render.Bind(r, &user); err != nil {
-		renderErr(w, r, err)
-		return
-	}
-	id := chi.URLParam(r, "id")
-	user.New, user.ID = false, id
-	_, err := db.Save(&user)
-	if err != nil {
-		renderErr(w, r, err)
+		customErr.RenderErr(w, r, err, code.InternalServerError)
 		return
 	}
 
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, map[string]interface{}{
-		"user_id": id,
-	})
+	user.New, user.ID = false, id
+	_, errCode, err := db.Save(&user)
+	if err != nil {
+		customErr.RenderErr(w, r, err, errCode)
+		return
+	}
+
+	msg := fmt.Sprint("user_id: ", id)
+	resp := success.Response{StatusCode: code.OK, Message: msg}
+	resp.Render(w, r)
 }
 
 func (api ApiV1) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	err := db.Delete(id)
+	errCode, err := db.Delete(id)
 	if err != nil {
-		renderErr(w, r, err)
+		customErr.RenderErr(w, r, err, errCode)
 		return
 	}
 
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, map[string]interface{}{
-		"message": "deleted",
-		"user_id": id,
-	})
-}
-
-func renderErr(w http.ResponseWriter, r *http.Request, err error) {
-	if errRender := render.Render(w, r, customErr.ErrInvalidRequest(err)); errRender != nil {
-		log.Println(errRender)
-	}
-	return
+	msg := fmt.Sprint("user_id: ", id)
+	resp := success.Response{StatusCode: code.OK, Message: msg}
+	resp.Render(w, r)
 }
